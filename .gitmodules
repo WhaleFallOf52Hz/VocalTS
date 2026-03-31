@@ -1,3 +1,6 @@
 [submodule "third_party/taglib-2.1.1"]
 	path = third_party/taglib-2.1.1
 	url = https://github.com/taglib/taglib.git
+[submodule "third_party/audio-slicer"]
+	path = third_party/audio-slicer
+	url = https://github.com/openvpi/audio-slicer.git
