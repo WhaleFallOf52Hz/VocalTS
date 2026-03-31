@@ -13,13 +13,24 @@
   `/home/pangjichen/workspace/VocalTS/linked_data/inference_data`
 
 ## 训练流程
-
+首先设置文件夹名称，例如：
+```bash
+avatar=ikura
+```
+创建系列文件夹：
+```bash
+mkdir -p /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/ncm
+mkdir -p /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/mp3
+mkdir -p /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/MSST
+mkdir -p /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/DDSP-SVC
+mkdir -p /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/ddsp-SVC-ckpt
+```
 ### 1. 准备原始 `ncm` 文件
 
 将训练用的 `ncm` 文件放到：
 
 ```text
-/home/pangjichen/workspace/VocalTS/linked_data/{avatar}
+/home/pangjichen/workspace/VocalTS/linked_data/${avatar}/ncm
 ```
 
 建议一个角色单独一个目录，便于后续批量处理。
@@ -31,15 +42,15 @@
 示例：
 
 ```bash
-ncmdump -d /home/pangjichen/workspace/VocalTS/linked_data/{avatar} \
-  -o /home/pangjichen/workspace/VocalTS/linked_data/{avatar}
+ncmdump -d /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/ncm \
+  -o /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/mp3
 ```
 
 如果需要递归处理子目录并保留目录结构，可以使用：
 
 ```bash
-ncmdump -d /home/pangjichen/workspace/VocalTS/linked_data/{avatar} \
-  -o /home/pangjichen/workspace/VocalTS/linked_data/{avatar} \
+ncmdump -d /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/ncm \
+  -o /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/mp3 \
   -r
 ```
 
@@ -63,8 +74,8 @@ cd /home/pangjichen/workspace/VocalTS/third_party/MSST-WebUI
 
 ```bash
 python msst_pipeline.py \
-  --input_dir /home/pangjichen/workspace/VocalTS/linked_data/{avatar} \
-  --output_dir /home/pangjichen/workspace/VocalTS/linked_data/{avatar}/cleaned \
+  --input_dir /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/mp3 \
+  --output_dir /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/MSST \
   --output_format flac \
   --dereverb_mode auto
 ```
@@ -93,10 +104,11 @@ cd /home/pangjichen/workspace/VocalTS
 
 ```bash
 python Slice_wav_for_DDSP_SVC.py \
-  /home/pangjichen/workspace/VocalTS/linked_data/{avatar}/cleaned/step_3/noreverb \
-  /home/pangjichen/workspace/VocalTS/linked_data/{avatar}/DDSP-SVC/train/audio \
-  --slice-duration 2.0 \
-  --recursive
+  /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/cleaned/step_3/noreverb \
+  /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/DDSP-SVC/train/audio \
+  --slice-duration 10.0 \
+  --discard-short \
+  --dry-run
 ```
 
 说明：
@@ -104,15 +116,7 @@ python Slice_wav_for_DDSP_SVC.py \
 - 该脚本当前支持输入 `wav` 或 `flac`。
 - 输出统一为切片后的 `wav`。
 
-### 5. 创建 DDSP-SVC checkpoint 目录
-
-创建目录：
-
-```bash
-mkdir -p /home/pangjichen/workspace/VocalTS/linked_data/{avatar}/DDSP-SVC-ckpt
-```
-
-### 6. 进入 `DDSP-SVC`，建立数据与实验目录链接
+### 5. 进入 `DDSP-SVC`，建立数据与实验目录链接
 
 切换到目录：
 
@@ -122,15 +126,22 @@ cd /home/pangjichen/workspace/VocalTS/third_party/DDSP-SVC
 
 将训练数据目录链接到 `./data`，将 checkpoint 目录链接到 `./exp`。
 
-示例：
+如果已有软链接，先断开
+```bash
+rm ./data
+rm ./exp
+```
 
 ```bash
-ln -s /home/pangjichen/workspace/VocalTS/linked_data/{avatar}/DDSP-SVC ./data/{avatar}
-ln -s /home/pangjichen/workspace/VocalTS/linked_data/{avatar}/DDSP-SVC-ckpt ./exp/{avatar}
+ln -s /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/DDSP-SVC ./data
+ln -s /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/DDSP-SVC-ckpt ./exp
 ```
 
 实际使用时，也可以按你的实验命名习惯创建更具体的软链接名称。
-
+### 6. 切分验证集
+```bash
+python ./draw.py
+```
 ### 7. 运行预处理
 
 在 `DDSP-SVC` 目录下执行：
@@ -152,7 +163,10 @@ python train_reflow.py -c configs/reflow.yaml
 ## 推理流程
 
 推理流程整体与训练前半段类似，只是不需要切片和训练，而是在提取出目标音频后直接做 DDSP-SVC 推理。
-
+先定义批次编号
+```bash
+data_index=0001
+```
 ### 1. 准备推理用 `ncm` 文件
 
 将 `ncm` 文件放到：
@@ -164,7 +178,7 @@ python train_reflow.py -c configs/reflow.yaml
 建议按批次或编号建立子目录，例如：
 
 ```text
-/home/pangjichen/workspace/VocalTS/linked_data/inference_data/0001
+/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}
 ```
 
 ### 2. 使用 `ncmdump` 转换为 `mp3`
@@ -172,9 +186,8 @@ python train_reflow.py -c configs/reflow.yaml
 示例：
 
 ```bash
-ncmdump -d /home/pangjichen/workspace/VocalTS/linked_data/inference_data \
-  -o /home/pangjichen/workspace/VocalTS/linked_data/inference_data \
-  -r
+ncmdump -d /home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index} \
+  -o /home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}
 ```
 
 ### 3. 进入 `MSST-WebUI`，进行三步提取
@@ -189,8 +202,8 @@ cd /home/pangjichen/workspace/VocalTS/third_party/MSST-WebUI
 
 ```bash
 python msst_pipeline.py \
-  --input_dir /home/pangjichen/workspace/VocalTS/linked_data/inference_data \
-  --output_dir /home/pangjichen/workspace/VocalTS/linked_data/inference_data/cleaned \
+  --input_dir /home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index} \
+  --output_dir /home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/cleaned \
   --output_format flac \
   --dereverb_mode auto
 ```
