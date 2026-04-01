@@ -26,6 +26,11 @@ third_party/MSST-WebUI/pretrain/hub/
 third_party/MSST-WebUI/presets/
 third_party/MSST-WebUI/presets_backup/
 
+third_party/SO-VITS-SVC/dataset/
+third_party/SO-VITS-SVC/dataset_raw/
+third_party/SO-VITS-SVC/logs/
+third_party/SO-VITS-SVC/pretrain/
+
 third_party/MSST-WebUI/*.ckpt
 third_party/MSST-WebUI/*.pt
 third_party/MSST-WebUI/*.pth

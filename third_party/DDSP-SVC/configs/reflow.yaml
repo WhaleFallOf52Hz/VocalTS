@@ -12,8 +12,9 @@ data:
   encoder_hop_size: 160 # 160 for 'contentvec768l12tta2x', 320 for any others
   encoder_out_channels: 768 # 256 if using 'hubertsoft'
   encoder_ckpt: pretrain/contentvec/pytorch_model.bin
-  train_path: data/train # Create a folder named "audio" under this path and put the audio clip in it
-  valid_path: data/val # Create a folder named "audio" under this path and put the audio clip in it
+  root_path: data # data/<speaker_id>/audio + split.json + features + pitch_aug_dict.npy
+  split_train_key: train
+  split_val_key: val
   extensions: # List of extension included in the data collection
     - wav
 model:
@@ -45,7 +46,7 @@ train:
   cache_all_data: true # Save Internal-Memory or Graphics-Memory if it is false, but may be slow
   cache_device: 'cuda' # Set to 'cuda' to cache the data into the Graphics-Memory, fastest speed for strong gpu
   cache_fp16: true
-  epochs: 10000
+  epochs: 2000
   interval_log: 1
   interval_val: 1000
   interval_force_save: 10000

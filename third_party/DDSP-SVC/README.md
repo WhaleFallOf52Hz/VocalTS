@@ -50,13 +50,14 @@ Download the pre-trained [RMVPE](https://github.com/yxlllc/RMVPE/releases/downlo
 
 ## 3. Preprocessing
 
-Put all the training dataset (.wav format audio clips) in the below directory: `data/train/audio`. Put all the validation dataset (.wav format audio clips) in the below directory: `data/val/audio`. You can also run
+Put your dataset in `data/<speaker_id>/audio` (or `data/audio` for single-speaker).
+Use `split.json` under each speaker/data root to mark train/val by audio filename. You can run
 
 ```bash
 python draw.py
 ```
 
-to help you select validation data (you can adjust the parameters in `draw.py` to modify the number of extracted files and other parameters)
+to generate/update `split.json` automatically (default mode is split mode; legacy move mode is still available)
 
 Then run the preprocessor:
 
@@ -74,41 +75,29 @@ NOTE 4: The total number of the audio clips for validation dataset is recommende
 
 NOTE 5: If your dataset is not very high quality, set 'f0_extractor' to 'rmvpe' in the config file.
 
-NOTE 6: Multi-speaker training is supported now. The 'n_spk' parameter in configuration file controls whether it is a multi-speaker model. If you want to train a **multi-speaker** model, audio folders need to be named with **positive integers not greater than 'n_spk'** to represent speaker ids, the directory structure is like below:
+NOTE 6: Multi-speaker training is supported now. The 'n_spk' parameter in configuration file controls whether it is a multi-speaker model. If you want to train a **multi-speaker** model, speaker folders need to be named with **positive integers not greater than 'n_spk'** to represent speaker ids, the directory structure is like below:
 
 ```bash
-# training dataset
-# the 1st speaker
-data/train/audio/1/aaa.wav
-data/train/audio/1/bbb.wav
-...
-# the 2nd speaker
-data/train/audio/2/ccc.wav
-data/train/audio/2/ddd.wav
-...
+# speaker 1
+data/1/audio/aaa.wav
+data/1/audio/bbb.wav
+data/1/split.json
+data/1/pitch_aug_dict.npy
 
-# validation dataset
-# the 1st speaker
-data/val/audio/1/eee.wav
-data/val/audio/1/fff.wav
-...
-# the 2nd speaker
-data/val/audio/2/ggg.wav
-data/val/audio/2/hhh.wav
-...
+# speaker 2
+data/2/audio/ccc.wav
+data/2/audio/ddd.wav
+data/2/split.json
+data/2/pitch_aug_dict.npy
 ```
 
-If 'n_spk' \= 1, The directory structure of the **single speaker** model is still supported, which is like below:
+If 'n_spk' \= 1, the single-speaker structure is like below:
 
 ```bash
-# training dataset
-data/train/audio/aaa.wav
-data/train/audio/bbb.wav
-...
-# validation dataset
-data/val/audio/ccc.wav
-data/val/audio/ddd.wav
-...
+data/audio/aaa.wav
+data/audio/bbb.wav
+data/split.json
+data/pitch_aug_dict.npy
 ```
 
 ## 4. Training

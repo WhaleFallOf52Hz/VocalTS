@@ -66,13 +66,12 @@ python 3.11 (windows) + cuda 13.0 + torch 2.9.1 + torchaudio 2.9.1 可以运行
 
 1. 手动配置：
 
-将所有的训练集数据 (.wav 格式音频切片) 放到 `data/train/audio`。
-
-将所有的验证集数据 (.wav 格式音频切片) 放到 `data/val/audio`。
+将音频放到 `data/<speaker_id>/audio`（单说话人可用 `data/audio`）。
+每个说话人目录下通过 `split.json` 标记 train/val（按音频文件名）。
 
 2. 程序随机选择：
 
-运行`python draw.py`,程序将帮助你挑选验证集数据（可以调整 `draw.py` 中的参数修改抽取文件的数量等参数）。
+运行 `python draw.py`，默认会在每个说话人目录下生成/更新 `split.json`（不移动音频文件）。
 
 3. 文件夹结构目录展示：
 
@@ -80,45 +79,44 @@ python 3.11 (windows) + cuda 13.0 + torch 2.9.1 + torchaudio 2.9.1 可以运行
 
 ```
 data
-├─ train
-│    ├─ audio
-│    │    ├─ aaa.wav
-│    │    ├─ bbb.wav
-│    │    └─ ....wav
-├─ val
-│    ├─ audio
-│    │    ├─ eee.wav
-│    │    ├─ fff.wav
-│    │    └─ ....wav
+├─ audio
+│    ├─ aaa.wav
+│    ├─ bbb.wav
+│    └─ ....wav
+├─ split.json
+├─ pitch_aug_dict.npy
+├─ f0/
+├─ volume/
+├─ mel/
+└─ units/
 ```
 
 * 多人物目录结构：
 
 ```
 data
-├─ train
+├─ 1
 │    ├─ audio
-│    │    ├─ 1
-│    │    │   ├─ aaa.wav
-│    │    │   ├─ bbb.wav
-│    │    │   └─ ....wav
-│    │    ├─ 2
-│    │    │   ├─ ccc.wav
-│    │    │   ├─ ddd.wav
-│    │    │   └─ ....wav
-│    │    └─ ...
-|
-├─ val
-|    ├─ audio
-│    │    ├─ 1
-│    │    │   ├─ eee.wav
-│    │    │   ├─ fff.wav
-│    │    │   └─ ....wav
-│    │    ├─ 2
-│    │    │   ├─ ggg.wav
-│    │    │   ├─ hhh.wav
-│    │    │   └─ ....wav
-│    │    └─ ...
+│    │    ├─ aaa.wav
+│    │    ├─ bbb.wav
+│    │    └─ ....wav
+│    ├─ split.json
+│    ├─ pitch_aug_dict.npy
+│    ├─ f0/
+│    ├─ volume/
+│    ├─ mel/
+│    └─ units/
+└─ 2
+	├─ audio
+	│    ├─ ccc.wav
+	│    ├─ ddd.wav
+	│    └─ ....wav
+	├─ split.json
+	├─ pitch_aug_dict.npy
+	├─ f0/
+	├─ volume/
+	├─ mel/
+	└─ units/
 ```
 
 ### 3.2. 执行预处理

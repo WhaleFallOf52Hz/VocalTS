@@ -5,6 +5,7 @@ import random
 import librosa
 import torch
 import argparse
+import json
 import shutil
 import concurrent.futures
 import torch.multiprocessing as mp
@@ -201,6 +202,79 @@ def _process_file(file, path, sample_rate, hop_size, use_pitch_aug, extensions):
     return None
 
 
+def normalize_rel_path(path):
+    return path.replace('\\', '/').lstrip('./')
+
+
+def discover_data_roots(data_root):
+    roots = []
+    root_audio = os.path.join(data_root, 'audio')
+    if os.path.isdir(root_audio):
+        roots.append(data_root)
+
+    if not os.path.isdir(data_root):
+        raise NotADirectoryError(f'data root does not exist: {data_root}')
+
+    for item in sorted(os.listdir(data_root)):
+        candidate = os.path.join(data_root, item)
+        if not os.path.isdir(candidate):
+            continue
+        if os.path.isdir(os.path.join(candidate, 'audio')):
+            roots.append(candidate)
+
+    unique_roots = []
+    seen = set()
+    for root in roots:
+        if root not in seen:
+            unique_roots.append(root)
+            seen.add(root)
+    return unique_roots
+
+
+def load_split_file(path_root, train_key='train', val_key='val'):
+    split_path = os.path.join(path_root, 'split.json')
+    if not os.path.isfile(split_path):
+        raise FileNotFoundError(f'split file not found: {split_path}')
+
+    with open(split_path, 'r', encoding='utf-8') as f:
+        split_data = json.load(f)
+
+    train_entries = [str(v) for v in split_data.get(train_key, [])]
+    val_entries = [str(v) for v in split_data.get(val_key, [])]
+    return train_entries, val_entries
+
+
+def resolve_split_entries(split_entries, available_files, path_root):
+    available_files = [normalize_rel_path(v) for v in available_files]
+    available_set = set(available_files)
+    basename_map = {}
+    for rel in available_files:
+        basename = os.path.basename(rel)
+        basename_map.setdefault(basename, []).append(rel)
+
+    resolved = set()
+    for entry in split_entries:
+        entry_norm = normalize_rel_path(entry)
+        if '/' in entry_norm:
+            if entry_norm not in available_set:
+                raise ValueError(f'split entry not found in audio folder ({path_root}): {entry_norm}')
+            resolved.add(entry_norm)
+            continue
+
+        candidates = basename_map.get(entry_norm, [])
+        if len(candidates) == 1:
+            resolved.add(candidates[0])
+        elif len(candidates) == 0:
+            raise ValueError(f'split entry not found in audio folder ({path_root}): {entry_norm}')
+        else:
+            raise ValueError(
+                f'ambiguous split entry in {path_root}: {entry_norm}, matched {candidates}. '
+                'Use relative path instead of basename.'
+            )
+
+    return resolved
+
+
 def preprocess(path, args, sample_rate=None, hop_size=None, device='cuda', use_pitch_aug=False, extensions=['wav'], workers=1):
     # List files
     path_srcdir = os.path.join(path, 'audio')
@@ -217,6 +291,20 @@ def preprocess(path, args, sample_rate=None, hop_size=None, device='cuda', use_p
     if hop_size is None:
         hop_size = args.data.block_size
 
+    train_key = args.data.split_train_key if args.data.split_train_key is not None else 'train'
+    val_key = args.data.split_val_key if args.data.split_val_key is not None else 'val'
+    train_entries, val_entries = load_split_file(path, train_key=train_key, val_key=val_key)
+    train_files = resolve_split_entries(train_entries, filelist, path)
+    val_files = resolve_split_entries(val_entries, filelist, path)
+
+    overlap = train_files & val_files
+    if len(overlap) > 0:
+        raise ValueError(f'split overlap in {path}: {sorted(overlap)[:10]}')
+
+    selected_files = sorted(train_files | val_files)
+    if len(selected_files) == 0:
+        raise ValueError(f'no selected files from split.json in: {path}')
+
     # Prepare arguments for worker initialization
     init_args = (args, device)
 
@@ -229,12 +317,20 @@ def preprocess(path, args, sample_rate=None, hop_size=None, device='cuda', use_p
     ) as executor:
         # Submit tasks
         future_to_file = {
-            executor.submit(_process_file, file, path, sample_rate, hop_size, use_pitch_aug, extensions): file
-            for file in filelist
+            executor.submit(
+                _process_file,
+                file,
+                path,
+                sample_rate,
+                hop_size,
+                file in train_files and use_pitch_aug,
+                extensions
+            ): file
+            for file in selected_files
         }
 
         # Collect results with progress bar
-        for future in tqdm(concurrent.futures.as_completed(future_to_file), total=len(filelist)):
+        for future in tqdm(concurrent.futures.as_completed(future_to_file), total=len(selected_files)):
             file = future_to_file[future]
             try:
                 keyshift = future.result()
@@ -244,10 +340,9 @@ def preprocess(path, args, sample_rate=None, hop_size=None, device='cuda', use_p
                 print(f'\n[Error] Task for {file} generated an exception: {e}')
 
     # Save pitch augmentation dictionary if any
-    if len(pitch_aug_dict) > 0:
-        path_pitchaugdict = os.path.join(path, 'pitch_aug_dict.npy')
-        np.save(path_pitchaugdict, pitch_aug_dict)
-        print(f'Saved pitch augmentation dictionary to {path_pitchaugdict}')
+    path_pitchaugdict = os.path.join(path, 'pitch_aug_dict.npy')
+    np.save(path_pitchaugdict, pitch_aug_dict)
+    print(f'Saved pitch augmentation dictionary to {path_pitchaugdict}, entries={len(pitch_aug_dict)}')
 
     
 if __name__ == '__main__':
@@ -266,8 +361,7 @@ if __name__ == '__main__':
     sample_rate = args.data.sampling_rate
     hop_size = args.data.block_size
     extensions = args.data.extensions
-    train_path = args.data.train_path
-    valid_path = args.data.valid_path
+    data_root = args.data.root_path
     use_pitch_aug = args.model.use_pitch_aug
     
     # get number of workers
@@ -277,22 +371,17 @@ if __name__ == '__main__':
         workers = multiprocessing.cpu_count()
     print(f'Using {workers} worker processes')   
 
-    # parallel processing
-    preprocess(train_path,
-               args=args,
-               sample_rate=sample_rate,
-               hop_size=hop_size,
-               device=device,
-               use_pitch_aug=use_pitch_aug,
-               extensions=extensions,
-               workers=workers)
+    path_roots = discover_data_roots(data_root)
+    if len(path_roots) == 0:
+        raise FileNotFoundError(f'no valid data roots with audio folder found under: {data_root}')
 
-    # preprocess validation set (no pitch augmentation)
-    preprocess(valid_path,
-               args=args,
-               sample_rate=sample_rate,
-               hop_size=hop_size,
-               device=device,
-               use_pitch_aug=False,
-               extensions=extensions,
-               workers=workers)
+    for path_root in path_roots:
+        print(f'Processing speaker/data root: {path_root}')
+        preprocess(path_root,
+                   args=args,
+                   sample_rate=sample_rate,
+                   hop_size=hop_size,
+                   device=device,
+                   use_pitch_aug=use_pitch_aug,
+                   extensions=extensions,
+                   workers=workers)

@@ -3,7 +3,6 @@ import contextlib
 import io
 import logging
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="2"
 import sys
 import traceback
 import warnings
@@ -52,6 +51,21 @@ STEP_3_VARIANTS = {
 	},
 }
 PROGRESS_TOKENS = ("Processing audio chunks", "Total progress")
+
+
+def configure_warning_filters(debug=False):
+	warnings.filterwarnings(
+		"ignore",
+		message=".*The pynvml package is deprecated.*",
+		category=FutureWarning,
+	)
+	warnings.filterwarnings(
+		"ignore",
+		message=".*pkg_resources is deprecated as an API.*",
+		category=UserWarning,
+	)
+	if not debug:
+		warnings.filterwarnings("ignore", category=UserWarning)
 
 
 def build_parser():
@@ -160,12 +174,17 @@ def load_step_configs(project_root):
 
 
 def create_separator(step_config, args, logger):
+	device = args["device"]
+	device_ids = args["device_ids"]
+	if device == "cuda" and len(device_ids) == 1:
+		device = f"cuda:{device_ids[0]}"
+
 	return MSSeparator(
 		model_type=step_config["model_type"],
 		config_path=step_config["config_path"],
 		model_path=step_config["model_path"],
-		device=args["device"],
-		device_ids=args["device_ids"],
+		device=device,
+		device_ids=device_ids,
 		output_format=args["output_format"],
 		use_tta=args["use_tta"],
 		store_dirs={},
@@ -295,8 +314,7 @@ def chunk_list(items, chunks):
 
 def worker_process(worker_id, audio_files, output_dir, step_configs, args, progress_queue=None):
 	logger = get_logger(console_level=logging.DEBUG if args["debug"] else logging.INFO)
-	if not args["debug"]:
-		warnings.filterwarnings("ignore", category=UserWarning)
+	configure_warning_filters(debug=args["debug"])
 
 	separator_cache = {}
 	success_files = []
@@ -382,7 +400,7 @@ def process_folder(args, project_root, logger):
 		return result["success_files"], result["failed_files"]
 
 	chunks = chunk_list(audio_files, args.jobs)
-	runtime_args = {
+	base_runtime_args = {
 		"device": args.device,
 		"device_ids": args.device_ids,
 		"output_format": args.output_format,
@@ -396,9 +414,14 @@ def process_folder(args, project_root, logger):
 	progress_queue = ctx.Queue()
 	processes = []
 	for index, chunk in enumerate(chunks):
+		worker_runtime_args = dict(base_runtime_args)
+		if args.device == "cuda" and args.device_ids:
+			assigned_device = args.device_ids[index % len(args.device_ids)]
+			worker_runtime_args["device_ids"] = [assigned_device]
+			logger.info(f"Worker {index} assigned device_ids={worker_runtime_args['device_ids']}")
 		process = ctx.Process(
 			target=worker_process,
-			args=(index, chunk, args.output_dir, step_configs, runtime_args, progress_queue),
+			args=(index, chunk, args.output_dir, step_configs, worker_runtime_args, progress_queue),
 			name=f"msst_pipeline_worker_{index}",
 		)
 		process.start()
@@ -441,8 +464,7 @@ def main():
 	args = parser.parse_args()
 
 	logger = get_logger(console_level=logging.DEBUG if args.debug else logging.INFO)
-	if not args.debug:
-		warnings.filterwarnings("ignore", category=UserWarning)
+	configure_warning_filters(debug=args.debug)
 
 	start_time = time()
 

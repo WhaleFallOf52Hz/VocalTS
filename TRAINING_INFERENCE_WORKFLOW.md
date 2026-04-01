@@ -15,22 +15,18 @@
 ## 训练流程
 首先设置文件夹名称，例如：
 ```bash
-avatar=ikura
+avatar=CuSummer
 ```
 创建系列文件夹：
 ```bash
-mkdir -p /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/ncm
-mkdir -p /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/mp3
-mkdir -p /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/MSST
-mkdir -p /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/DDSP-SVC
-mkdir -p /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/ddsp-SVC-ckpt
+python func_scripts/0_create_avatar.py ${avatar}
 ```
 ### 1. 准备原始 `ncm` 文件
 
 将训练用的 `ncm` 文件放到：
 
 ```text
-/home/pangjichen/workspace/VocalTS/linked_data/${avatar}/ncm
+/home/pangjichen/workspace/VocalTS/linked_data/avatars/${avatar}/ncm
 ```
 
 建议一个角色单独一个目录，便于后续批量处理。
@@ -42,21 +38,13 @@ mkdir -p /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/ddsp-SVC-ckpt
 示例：
 
 ```bash
-ncmdump -d /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/ncm \
-  -o /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/mp3
-```
-
-如果需要递归处理子目录并保留目录结构，可以使用：
-
-```bash
-ncmdump -d /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/ncm \
-  -o /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/mp3 \
-  -r
+ncmdump -d ./linked_data/avatars/${avatar}/meta_data/ncm \
+  -o ./linked_data/avatars/${avatar}/meta_data/audio
 ```
 
 参考命令可见 [use.sh](/home/pangjichen/workspace/VocalTS/third_party/ncmdump/use.sh)。
 
-### 3. 进入 `MSST-WebUI`，对 `mp3` 批量进行三步处理
+### 3. 进入 `MSST-WebUI`，对 `audio` 批量进行三步处理
 
 切换到目录：
 
@@ -74,10 +62,12 @@ cd /home/pangjichen/workspace/VocalTS/third_party/MSST-WebUI
 
 ```bash
 python msst_pipeline.py \
-  --input_dir /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/mp3 \
-  --output_dir /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/MSST \
+  --input_dir ./../../linked_data/avatars/${avatar}/meta_data/audio \
+  --output_dir ./../../linked_data/avatars/${avatar}/meta_data/MSST \
   --output_format flac \
-  --dereverb_mode auto
+  --dereverb_mode auto \
+  --device_ids 2 3 \
+  --jobs 8 
 ```
 
 说明：
@@ -94,21 +84,23 @@ python msst_pipeline.py \
 cd /home/pangjichen/workspace/VocalTS
 ```
 
-使用 [Slice_wav_for_DDSP_SVC.py](/home/pangjichen/workspace/VocalTS/Slice_wav_for_DDSP_SVC.py) 将最终得到的 `noreverb` 音频切片到：
+先不落盘测试：
+```bash
+python Slice_wav_for_DDSP_SVC.py \
+  ./linked_data/avatars/${avatar}/meta_data/MSST/step_3/noreverb \
+  ./linked_data/avatars/${avatar}/meta_data/vocal_sliced \
+  --discard-short \
+  --dry-run 
 
-```text
-/home/pangjichen/workspace/VocalTS/linked_data/{avatar}/DDSP-SVC/train/audio
 ```
 
 示例：
 
 ```bash
 python Slice_wav_for_DDSP_SVC.py \
-  /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/cleaned/step_3/noreverb \
-  /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/DDSP-SVC/train/audio \
-  --slice-duration 10.0 \
-  --discard-short \
-  --dry-run
+  ./linked_data/avatars/${avatar}/meta_data/MSST/step_3/noreverb \
+  ./linked_data/avatars/${avatar}/meta_data/vocal_sliced \
+  --discard-short
 ```
 
 说明：
@@ -116,29 +108,24 @@ python Slice_wav_for_DDSP_SVC.py \
 - 该脚本当前支持输入 `wav` 或 `flac`。
 - 输出统一为切片后的 `wav`。
 
-### 5. 进入 `DDSP-SVC`，建立数据与实验目录链接
+### 5. 建立数据与实验目录链接
 
 切换到目录：
 
 ```bash
-cd /home/pangjichen/workspace/VocalTS/third_party/DDSP-SVC
+cd /home/pangjichen/workspace/VocalTS/
 ```
 
 将训练数据目录链接到 `./data`，将 checkpoint 目录链接到 `./exp`。
 
-如果已有软链接，先断开
-```bash
-rm ./data
-rm ./exp
-```
 
+对已有人声，链接：
 ```bash
-ln -s /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/DDSP-SVC ./data
-ln -s /home/pangjichen/workspace/VocalTS/linked_data/${avatar}/DDSP-SVC-ckpt ./exp
+python func_scripts/1_switch_avatar.py ${avatar}
 ```
 
 实际使用时，也可以按你的实验命名习惯创建更具体的软链接名称。
-### 6. 切分验证集
+### 6. 进入 `DDSP-SVC`，切分验证集
 ```bash
 python ./draw.py
 ```
@@ -226,12 +213,24 @@ cd /home/pangjichen/workspace/VocalTS/third_party/DDSP-SVC
 示例命令可参考 [use.sh](/home/pangjichen/workspace/VocalTS/third_party/DDSP-SVC/use.sh)。
 
 一个推理示例：
-
+```bash
+music_name="hanasaki - 快晴"
+```
 ```bash
 python main_reflow.py \
-  -i "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/0003/cleaned/step_2/Instrumental/ヨルシカ - だから僕は音楽を辞めた_Instrumental.flac" \
-  -m "exp/reflow-test/model_40000.pt" \
-  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/0003/transfered/ヨルシカ - だから僕は音楽を辞めた_Harmonic.flac" \
+  -i "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/cleaned/step_3/noreverb/${music_name}_noreverb.flac" \
+  -m "exp/reflow-test-old/model_30000.pt" \
+  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered/${music_name}_DryVocal_30000.flac" \
+  -k 0 \
+  -id 1 \
+  -method "auto" \
+  -ts 0.0
+```
+```bash
+python main_reflow.py \
+  -i "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/cleaned/step_2/Instrumental/${music_name}_Instrumental.flac" \
+  -m "exp/reflow-test-old/model_30000.pt" \
+  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered/${music_name}_Harmonic_30000.flac" \
   -k 0 \
   -id 1 \
   -method "auto" \
