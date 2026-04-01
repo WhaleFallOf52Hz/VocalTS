@@ -30,6 +30,8 @@ third_party/SO-VITS-SVC/dataset/
 third_party/SO-VITS-SVC/dataset_raw/
 third_party/SO-VITS-SVC/logs/
 third_party/SO-VITS-SVC/pretrain/
+third_party/SO-VITS-SVC/universial_model/
+
 
 third_party/MSST-WebUI/*.ckpt
 third_party/MSST-WebUI/*.pt
