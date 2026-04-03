@@ -22,7 +22,8 @@
     "use_sr": true,
     "max_speclen": 512,
     "port": "8001",
-    "keep_ckpts": 3,
+    "save_interval": 10000,
+    "keep_ckpts": 1,
     "all_in_mem": false,
     "vol_aug":false
   },

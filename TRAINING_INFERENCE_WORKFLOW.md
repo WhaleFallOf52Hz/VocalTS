@@ -1,6 +1,12 @@
 # VocalTS 训练与推理流程
 
-本文档描述当前项目中基于 `ncmdump`、`MSST-WebUI` 和 `DDSP-SVC` 的训练与推理流程。
+本文档描述当前项目中基于 `ncmdump`、`MSST-WebUI`、`DDSP-SVC` 和 `SO-VITS-SVC` 的流程。
+
+为便于维护，流程拆分为三部分：
+
+1. 通用预处理（`ncmdump` + `MSST-WebUI`）
+2. `DDSP-SVC` 训练与推理（保持现有流程）
+3. `SO-VITS-SVC` 训练与推理（预留章节）
 
 ## 总体说明
 
@@ -12,7 +18,12 @@
 - 推理数据目录默认使用：
   `/home/pangjichen/workspace/VocalTS/linked_data/inference_data`
 
-## 训练流程
+## 通用预处理（ncmdump + MSST-WebUI + 切片）
+
+这一部分是 `DDSP-SVC` 和 `SO-VITS-SVC` 共用的前置流程。
+
+### 训练数据预处理
+
 首先设置文件夹名称，例如：
 ```bash
 avatar=CuSummer
@@ -21,7 +32,7 @@ avatar=CuSummer
 ```bash
 python func_scripts/0_create_avatar.py ${avatar}
 ```
-### 1. 准备原始 `ncm` 文件
+#### 1. 准备原始 `ncm` 文件
 
 将训练用的 `ncm` 文件放到：
 
@@ -31,7 +42,7 @@ python func_scripts/0_create_avatar.py ${avatar}
 
 建议一个角色单独一个目录，便于后续批量处理。
 
-### 2. 使用 `ncmdump` 批量转换为 `mp3`
+#### 2. 使用 `ncmdump` 批量转换为 `mp3`
 
 `ncmdump` 不依赖当前仓库相对路径，可以直接在任意目录执行。
 
@@ -44,7 +55,7 @@ ncmdump -d ./linked_data/avatars/${avatar}/meta_data/ncm \
 
 参考命令可见 [use.sh](/home/pangjichen/workspace/VocalTS/third_party/ncmdump/use.sh)。
 
-### 3. 进入 `MSST-WebUI`，对 `audio` 批量进行三步处理
+#### 3. 进入 `MSST-WebUI`，对 `audio` 批量进行三步处理
 
 切换到目录：
 
@@ -66,7 +77,7 @@ python msst_pipeline.py \
   --output_dir ./../../linked_data/avatars/${avatar}/meta_data/MSST \
   --output_format flac \
   --dereverb_mode auto \
-  --device_ids 2 3 \
+  --device_ids 0 1 \
   --jobs 8 
 ```
 
@@ -76,7 +87,7 @@ python msst_pipeline.py \
 - step 3 的最终干声输出位于：
   `/home/pangjichen/workspace/VocalTS/linked_data/{avatar}/cleaned/step_3/noreverb`
 
-### 4. 回到 `VocalTS`，将 step 3 的 `noreverb` 切片到 DDSP-SVC 训练目录
+#### 4. 回到 `VocalTS`，将 step 3 的 `noreverb` 进行切片
 
 切换到目录：
 
@@ -108,53 +119,16 @@ python Slice_wav_for_DDSP_SVC.py \
 - 该脚本当前支持输入 `wav` 或 `flac`。
 - 输出统一为切片后的 `wav`。
 
-### 5. 建立数据与实验目录链接
+### 推理数据预处理
 
-切换到目录：
+推理流程的前处理整体类似训练，只是不需要切片与训练。
 
-```bash
-cd /home/pangjichen/workspace/VocalTS/
-```
-
-将训练数据目录链接到 `./data`，将 checkpoint 目录链接到 `./exp`。
-
-
-对已有人声，链接：
-```bash
-python func_scripts/1_switch_avatar.py ${avatar}
-```
-
-实际使用时，也可以按你的实验命名习惯创建更具体的软链接名称。
-### 6. 进入 `DDSP-SVC`，切分验证集
-```bash
-python ./draw.py
-```
-### 7. 运行预处理
-
-在 `DDSP-SVC` 目录下执行：
-
-```bash
-python preprocess.py -c configs/reflow.yaml -j 4
-```
-
-### 8. 开始训练
-
-在 `DDSP-SVC` 目录下执行：
-
-```bash
-python train_reflow.py -c configs/reflow.yaml
-```
-
-参考命令可见 [use.sh](/home/pangjichen/workspace/VocalTS/third_party/DDSP-SVC/use.sh)。
-
-## 推理流程
-
-推理流程整体与训练前半段类似，只是不需要切片和训练，而是在提取出目标音频后直接做 DDSP-SVC 推理。
-先定义批次编号
+先定义批次编号：
 ```bash
 data_index=0001
 ```
-### 1. 准备推理用 `ncm` 文件
+
+#### 1. 准备推理用 `ncm` 文件
 
 将 `ncm` 文件放到：
 
@@ -168,7 +142,7 @@ data_index=0001
 /home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}
 ```
 
-### 2. 使用 `ncmdump` 转换为 `mp3`
+#### 2. 使用 `ncmdump` 转换为 `mp3`
 
 示例：
 
@@ -177,7 +151,7 @@ ncmdump -d /home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_
   -o /home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}
 ```
 
-### 3. 进入 `MSST-WebUI`，进行三步提取
+#### 3. 进入 `MSST-WebUI`，进行三步提取
 
 切换到目录：
 
@@ -200,17 +174,63 @@ python msst_pipeline.py \
 - `step_3/noreverb`：更适合做主干声推理
 - `step_2/Instrumental` 或其他保留部分：可根据任务用于和声或伴随部分推理
 
-### 4. 进入 `DDSP-SVC`，分别对干声部分和和声部分进行推理
+## DDSP-SVC 流程
+
+### 训练流程
+
+#### 1. 建立数据与实验目录链接
+
+切换到目录：
+
+```bash
+cd /home/pangjichen/workspace/VocalTS/
+```
+
+将训练数据目录链接到 `./data`，将 checkpoint 目录链接到 `./exp`。
+
+
+对已有人声，链接：
+```bash
+python func_scripts/1_switch_avatar.py ${avatar} "DDSP-SVC"
+```
+
+实际使用时，也可以按你的实验命名习惯创建更具体的软链接名称。
+#### 2. 进入 `DDSP-SVC`，切分验证集
+```bash
+cd /home/pangjichen/workspace/VocalTS/third_party/DDSP-SVC
+```
+```bash
+python ./draw.py
+```
+#### 3. 运行预处理
+
+在 `DDSP-SVC` 目录下执行：
+
+```bash
+python preprocess.py -c configs/reflow.yaml -j 4
+```
+
+#### 4. 开始训练
+
+在 `DDSP-SVC` 目录下执行：
+
+```bash
+python train_reflow.py -c configs/reflow.yaml
+```
+
+参考命令可见 [use.sh](/home/pangjichen/workspace/VocalTS/third_party/DDSP-SVC/use.sh)。
+
+### 推理流程
+
+以下内容维持原有流程不变。
+
+#### 1. 进入 `DDSP-SVC`，分别对干声部分和和声部分进行推理
 
 切换到目录：
 
 ```bash
 cd /home/pangjichen/workspace/VocalTS/third_party/DDSP-SVC
 ```
-
-使用训练好的模型，分别对不同输入音频执行 `main_reflow.py`。
-
-示例命令可参考 [use.sh](/home/pangjichen/workspace/VocalTS/third_party/DDSP-SVC/use.sh)。
 
 一个推理示例：
 ```bash
@@ -219,8 +239,8 @@ music_name="hanasaki - 快晴"
 ```bash
 python main_reflow.py \
   -i "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/cleaned/step_3/noreverb/${music_name}_noreverb.flac" \
-  -m "exp/reflow-test-old/model_30000.pt" \
-  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered/${music_name}_DryVocal_30000.flac" \
+  -m "exp/reflow-test/model_best_mel_val_mse_step19000.pt" \
+  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered/${music_name}_DryVocal_19000.flac" \
   -k 0 \
   -id 1 \
   -method "auto" \
@@ -229,8 +249,8 @@ python main_reflow.py \
 ```bash
 python main_reflow.py \
   -i "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/cleaned/step_2/Instrumental/${music_name}_Instrumental.flac" \
-  -m "exp/reflow-test-old/model_30000.pt" \
-  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered/${music_name}_Harmonic_30000.flac" \
+  -m "exp/reflow-test/model_best_mel_val_mse_step19000.pt" \
+  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered/${music_name}_Harmonic_19000.flac" \
   -k 0 \
   -id 1 \
   -method "auto" \
@@ -243,6 +263,70 @@ python main_reflow.py \
 - 和声部分
 
 执行两次推理，再按需要混合最终结果。
+
+## SO-VITS-SVC 流程
+
+### 训练流程
+
+切换到目录：
+
+```bash
+cd /home/pangjichen/workspace/VocalTS/
+```
+
+对已有人声，链接：
+```bash
+python func_scripts/1_switch_avatar.py ${avatar} "SO-VITS-SVC"
+```
+
+切换到SOVITS文件夹
+```bash
+cd /home/pangjichen/workspace/VocalTS/third_party/SO-VITS-SVC
+```
+切分验证集并生成配置文件
+```bash
+python preprocess_flist_config.py --speech_encoder vec768l12
+```
+预处理生成特征
+```bash
+python preprocess_hubert_f0.py --f0_predictor rmvpe --use_diff --num_processes 8
+```
+#### 正式训练
+主模型训练
+```bash
+python train.py -c configs/config.json -m 44k
+```
+如果需要浅扩散模型(高质量数据集适用)
+```bash
+python train_diff.py -c configs/diffusion.yaml
+```
+
+### 推理流程
+
+```bash
+cd /home/pangjichen/workspace/VocalTS/third_party/SO-VITS-SVC
+data_index=0016
+music_name="hanasaki - 快晴"
+```
+
+```bash
+python inference_main.py \
+  -m "logs/44k/G_90400.pth" \
+  -c "configs/config.json" \
+  -n "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/cleaned/step_3/noreverb/${music_name}_noreverb.flac" \
+  -t 0 \
+  --enhance \
+  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered_SOVITS/${music_name}_DryVocal_90400.flac"
+```
+```bash
+python inference_main.py \
+  -m "logs/44k/G_90400.pth" \
+  -c "configs/config.json" \
+  -n "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/cleaned/step_2/Instrumental/${music_name}_Instrumental.flac" \
+  -t 0 \
+  --enhance \
+  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered_SOVITS/${music_name}_Harmonic_90400.flac"
+```
 
 ## 目录切换注意事项
 

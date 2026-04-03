@@ -1,5 +1,6 @@
 import argparse
-
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "2,3"  # Set this to the GPU IDs you want to use
 import torch
 from loguru import logger
 from torch.optim import lr_scheduler

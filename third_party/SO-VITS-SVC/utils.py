@@ -212,6 +212,8 @@ def clean_checkpoints(path_to_models='logs/44k/', n_ckpts_to_keep=2, sort_by_tim
                         False -> lexicographically delete ckpts
   """
   ckpts_files = [f for f in os.listdir(path_to_models) if os.path.isfile(os.path.join(path_to_models, f))]
+  step_ckpt_pattern = re.compile(r'^(G|D)_(\d+)\.pth$')
+  ckpts_files = [f for f in ckpts_files if step_ckpt_pattern.match(f)]
   def name_key(_f):
       return int(re.compile("._(\\d+)\\.pth").match(_f).group(1))
   def time_key(_f):

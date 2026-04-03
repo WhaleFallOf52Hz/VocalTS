@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 import random
 import warnings
 from concurrent.futures import ProcessPoolExecutor

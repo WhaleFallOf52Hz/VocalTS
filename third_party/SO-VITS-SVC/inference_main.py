@@ -1,3 +1,5 @@
+import os 
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 import logging
 
 import soundfile
@@ -22,7 +24,8 @@ def main():
     parser.add_argument('-cl', '--clip', type=float, default=0, help='音频强制切片，默认0为自动切片，单位为秒/s')
     parser.add_argument('-n', '--clean_names', type=str, nargs='+', default=["君の知らない物語-src.wav"], help='wav文件名列表，放在raw文件夹下')
     parser.add_argument('-t', '--trans', type=int, nargs='+', default=[0], help='音高调整，支持正负（半音）')
-    parser.add_argument('-s', '--spk_list', type=str, nargs='+', default=['buyizi'], help='合成目标说话人名称')
+    parser.add_argument('-s', '--spk_list', type=str, nargs='+', default=None, help='合成目标说话人名称，不传则自动使用模型中的默认说话人')
+    parser.add_argument('-o', '--output_name', type=str, default=None, help='输出文件名（可选），不传则按默认规则命名')
     
     # 可选项部分
     parser.add_argument('-a', '--auto_predict_f0', action='store_true', default=False, help='语音转换自动预测音高，转换歌声时不要打开这个会严重跑调')
@@ -81,6 +84,7 @@ def main():
     use_spk_mix = args.use_spk_mix
     second_encoding = args.second_encoding
     loudness_envelope_adjustment = args.loudness_envelope_adjustment
+    output_name = args.output_name
 
     if cluster_infer_ratio != 0:
         if args.cluster_model_path == "":
@@ -102,6 +106,22 @@ def main():
                     only_diffusion,
                     use_spk_mix,
                     args.feature_retrieval)
+
+    available_spk_list = list(svc_model.spk2id.keys())
+    if not use_spk_mix:
+        if spk_list is None:
+            if len(available_spk_list) == 0:
+                raise RuntimeError("No speaker found in model config. Please check the `spk` field in config.json")
+            spk_list = [available_spk_list[0]]
+            print(f"[Info] --spk_list 未指定，自动使用说话人: {spk_list[0]}")
+        else:
+            invalid_spk = [spk for spk in spk_list if spk not in svc_model.spk2id]
+            if len(invalid_spk) > 0:
+                if len(available_spk_list) == 1:
+                    spk_list = [available_spk_list[0]]
+                    print(f"[Warn] 传入说话人 {invalid_spk} 不存在，自动回退到唯一说话人: {spk_list[0]}")
+                else:
+                    raise RuntimeError(f"The speaker name {invalid_spk} is not in speaker list: {available_spk_list}")
     
     infer_tool.mkdir(["raw", "results"])
     
@@ -112,10 +132,14 @@ def main():
     
     infer_tool.fill_a_to_b(trans, clean_names)
     for clean_name, tran in zip(clean_names, trans):
-        raw_audio_path = f"raw/{clean_name}"
-        if "." not in raw_audio_path:
+        if os.path.isabs(clean_name) or os.path.exists(clean_name):
+            raw_audio_path = clean_name
+        else:
+            raw_audio_path = f"raw/{clean_name}"
+        if "." not in os.path.basename(raw_audio_path):
             raw_audio_path += ".wav"
         infer_tool.format_wav(raw_audio_path)
+        clean_name_for_save = os.path.basename(clean_name)
         for spk in spk_list:
             kwarg = {
                 "raw_audio_path" : raw_audio_path,
@@ -147,7 +171,16 @@ def main():
                 isdiffusion = "diff"
             if use_spk_mix:
                 spk = "spk_mix"
-            res_path = f'results/{clean_name}_{key}_{spk}{cluster_name}_{isdiffusion}_{f0p}.{wav_format}'
+            if output_name:
+                normalized_output_name = output_name
+                if "." not in os.path.basename(normalized_output_name):
+                    normalized_output_name = f"{normalized_output_name}.{wav_format}"
+                if os.path.dirname(normalized_output_name):
+                    res_path = normalized_output_name
+                else:
+                    res_path = f"results/{normalized_output_name}"
+            else:
+                res_path = f'results/{clean_name_for_save}_{key}_{spk}{cluster_name}_{isdiffusion}_{f0p}.{wav_format}'
             soundfile.write(res_path, audio, svc_model.target_sample, format=wav_format)
             svc_model.clear_empty()
             

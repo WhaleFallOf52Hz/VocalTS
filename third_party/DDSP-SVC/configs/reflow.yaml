@@ -54,5 +54,6 @@ train:
   decay_step: 4000
   gamma: 0.9
   weight_decay: 0.1
+  best_mel_val_mse_top_k: 3
   lambda_ddsp: 1
   save_opt: false  

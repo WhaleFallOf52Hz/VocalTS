@@ -136,6 +136,8 @@ class AudioDataset(Dataset):
         self.data_buffer={}
         self.pitch_aug_dict = {}
         self.unit_interpolate_mode = unit_interpolate_mode
+        self.min_duration = self.waveform_sec
+        self.valid_sample_indices = []
         # np.load(os.path.join(self.path_root, 'pitch_aug_dict.npy'), allow_pickle=True).item()
         if os.path.isdir(data_source):
             self.samples = collect_samples(
@@ -227,16 +229,31 @@ class AudioDataset(Dataset):
                     'spk_id': spk_id,
                     'sample': sample,
                         }
+
+        if self.whole_audio:
+            self.valid_sample_indices = list(range(len(self.samples)))
+        else:
+            self.valid_sample_indices = [
+                sample_idx
+                for sample_idx, data_buffer in self.data_buffer.items()
+                if data_buffer['duration'] >= self.min_duration
+            ]
+
+        if len(self.valid_sample_indices) == 0:
+            raise ValueError(
+                f"No valid samples found for split={self.split}. "
+                f"Required duration >= {self.min_duration:.2f}s, "
+                f"but all {len(self.samples)} samples are shorter. "
+                "Please reduce data.duration in config or use longer audio clips."
+            )
            
 
     def __getitem__(self, file_idx):
-        data_buffer = self.data_buffer[file_idx]
-        # check duration. if too short, then skip
-        if data_buffer['duration'] < (self.waveform_sec + 0.1):
-            return self.__getitem__( (file_idx + 1) % len(self.samples))
+        sample_idx = self.valid_sample_indices[file_idx]
+        data_buffer = self.data_buffer[sample_idx]
             
         # get item
-        return self.get_data(file_idx, data_buffer)
+        return self.get_data(sample_idx, data_buffer)
 
     def get_data(self, file_idx, data_buffer):
         sample = data_buffer['sample']
@@ -247,7 +264,8 @@ class AudioDataset(Dataset):
         waveform_sec = duration if self.whole_audio else self.waveform_sec
         
         # load audio
-        idx_from = 0 if self.whole_audio else random.uniform(0, duration - waveform_sec - 0.1)
+        max_offset = max(duration - waveform_sec, 0.0)
+        idx_from = 0 if self.whole_audio or max_offset <= 0 else random.uniform(0, max_offset)
         start_frame = int(idx_from / frame_resolution)
         units_frame_len = int(waveform_sec / frame_resolution)
         aug_flag = random.choice([True, False]) and self.use_aug
@@ -310,4 +328,4 @@ class AudioDataset(Dataset):
         return dict(mel=mel, f0=f0_frames, volume=volume_frames, units=units, spk_id=spk_id, aug_shift=aug_shift, name=name, name_ext=audio_path)
 
     def __len__(self):
-        return len(self.samples)
+        return len(self.valid_sample_indices)

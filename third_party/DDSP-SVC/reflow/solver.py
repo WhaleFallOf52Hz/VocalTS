@@ -1,5 +1,6 @@
 import os
 import time
+import json
 import numpy as np
 import torch
 import librosa
@@ -46,6 +47,49 @@ def calculate_mel_psnr(gt_mel, pred_mel):
     # 计算并返回PSNR
     psnr = 10 * torch.log10(max_power / mse)
     return psnr
+
+
+def update_top3_mel_val_mse_checkpoints(args, saver, model, optimizer, mel_val_mse):
+    top_k = int(getattr(args.train, 'best_mel_val_mse_top_k', 3))
+    top_k = max(1, top_k)
+
+    meta_path = os.path.join(args.env.expdir, 'best_mel_val_mse_top3.json')
+    records = []
+    if os.path.exists(meta_path):
+        with open(meta_path, 'r', encoding='utf-8') as f:
+            records = json.load(f)
+
+    current_step = int(saver.global_step)
+    current_postfix = f'best_mel_val_mse_step{current_step}'
+    current_record = {
+        'global_step': current_step,
+        'mel_val_mse': float(mel_val_mse),
+        'postfix': current_postfix,
+    }
+
+    for rec in records:
+        if int(rec.get('global_step', -1)) == current_step:
+            saver.delete_model(postfix=rec.get('postfix', ''))
+    records = [rec for rec in records if int(rec.get('global_step', -1)) != current_step]
+
+    records.append(current_record)
+    records = sorted(records, key=lambda x: float(x['mel_val_mse']))
+    top3_records = records[:top_k]
+    removed_records = records[top_k:]
+
+    if any(int(rec['global_step']) == current_step for rec in top3_records):
+        saver.save_model(model, optimizer, postfix=current_postfix)
+
+    for rec in removed_records:
+        saver.delete_model(postfix=rec.get('postfix', ''))
+
+    with open(meta_path, 'w', encoding='utf-8') as f:
+        json.dump(top3_records, f, ensure_ascii=False, indent=2)
+
+    saver.log_info('Top{} validation/mel_val_mse checkpoints: {}'.format(
+        top_k,
+        [(int(rec['global_step']), float(rec['mel_val_mse'])) for rec in top3_records]
+    ))
 
 def test(args, model, vocoder, loader_test, saver):
     print(' [*] testing...')
@@ -186,7 +230,7 @@ def test(args, model, vocoder, loader_test, saver):
     saver.log_value({
         'validation/mel_val_sisnr': mel_val_sisnr_all
     })
-    return test_ddsp_loss, test_reflow_loss
+    return test_ddsp_loss, test_reflow_loss, mel_val_mse_all
 
 
 def train(args, initial_global_step, model, optimizer, scheduler, vocoder, loader_train, loader_test):
@@ -287,7 +331,7 @@ def train(args, initial_global_step, model, optimizer, scheduler, vocoder, loade
                     saver.delete_model(postfix=f'{last_val_step}')
                 
                 # run testing set
-                test_ddsp_loss, test_reflow_loss = test(args, model, vocoder, loader_test, saver)
+                test_ddsp_loss, test_reflow_loss, mel_val_mse = test(args, model, vocoder, loader_test, saver)
                 test_loss = args.train.lambda_ddsp * test_ddsp_loss + test_reflow_loss
                 
                 # log loss
@@ -302,6 +346,14 @@ def train(args, initial_global_step, model, optimizer, scheduler, vocoder, loade
                     'validation/ddsp_loss': test_ddsp_loss,
                     'validation/reflow_loss': test_reflow_loss
                 })
+
+                update_top3_mel_val_mse_checkpoints(
+                    args,
+                    saver,
+                    model,
+                    optimizer_save,
+                    mel_val_mse,
+                )
                 
                 model.train()
 
