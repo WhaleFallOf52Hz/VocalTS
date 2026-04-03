@@ -23,7 +23,7 @@
     "max_speclen": 512,
     "port": "8001",
     "save_interval": 10000,
-    "keep_ckpts": 1,
+    "best_ckpts_topk": 3,
     "all_in_mem": false,
     "vol_aug":false
   },

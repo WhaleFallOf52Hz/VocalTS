@@ -124,7 +124,7 @@ if __name__ == "__main__":
     config_template["model"]["n_speakers"] = spk_id
     config_template["model"]["speech_encoder"] = args.speech_encoder
     config_template["train"]["save_interval"] = 10000
-    config_template["train"]["keep_ckpts"] = 1
+    config_template["train"]["best_ckpts_topk"] = 3
     config_template["data"]["source_dir"] = args.source_dir
     config_template["data"]["split_file"] = ""
     config_template["data"]["split_train_key"] = args.split_train_key

@@ -229,6 +229,46 @@ def clean_checkpoints(path_to_models='logs/44k/', n_ckpts_to_keep=2, sort_by_tim
       return [os.remove(x), del_info(x)]
   [del_routine(fn) for fn in to_del]
 
+
+def prune_best_checkpoints(path_to_models='logs/44k/', n_best_to_keep=3):
+  """Keep only top-k best checkpoint pairs by eval loss encoded in filename.
+
+  Expected filename format:
+  - G_best_{step}_{loss}.pth
+  - D_best_{step}_{loss}.pth
+  """
+  n_best_to_keep = max(1, int(n_best_to_keep))
+  pattern = re.compile(r'^(G|D)_best_(\d+)_([0-9]+(?:\.[0-9]+)?)\.pth$')
+
+  grouped = {}
+  for file_name in os.listdir(path_to_models):
+    file_path = os.path.join(path_to_models, file_name)
+    if not os.path.isfile(file_path):
+      continue
+    match = pattern.match(file_name)
+    if not match:
+      continue
+    prefix, step_str, loss_str = match.groups()
+    key = (int(step_str), float(loss_str))
+    if key not in grouped:
+      grouped[key] = {}
+    grouped[key][prefix] = file_name
+
+  complete_pairs = []
+  for (step, loss), pair_files in grouped.items():
+    if 'G' in pair_files and 'D' in pair_files:
+      complete_pairs.append((step, loss, pair_files['G'], pair_files['D']))
+
+  complete_pairs.sort(key=lambda item: (item[1], item[0]))
+  to_delete = complete_pairs[n_best_to_keep:]
+
+  for _, _, g_name, d_name in to_delete:
+    for name in (g_name, d_name):
+      path = os.path.join(path_to_models, name)
+      if os.path.exists(path):
+        logger.info(f".. Free up space by deleting best ckpt {path}")
+        os.remove(path)
+
 def summarize(writer, global_step, scalars={}, histograms={}, images={}, audios={}, audio_sampling_rate=22050):
   for k, v in scalars.items():
     writer.add_scalar(k, v, global_step)
