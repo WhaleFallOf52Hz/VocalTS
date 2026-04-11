@@ -1,5 +1,4 @@
 import os 
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 import logging
 
 import soundfile
@@ -181,6 +180,9 @@ def main():
                     res_path = f"results/{normalized_output_name}"
             else:
                 res_path = f'results/{clean_name_for_save}_{key}_{spk}{cluster_name}_{isdiffusion}_{f0p}.{wav_format}'
+            output_dir = os.path.dirname(res_path)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
             soundfile.write(res_path, audio, svc_model.target_sample, format=wav_format)
             svc_model.clear_empty()
             

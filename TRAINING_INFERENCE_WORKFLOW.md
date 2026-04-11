@@ -234,13 +234,13 @@ cd /home/pangjichen/workspace/VocalTS/third_party/DDSP-SVC
 
 一个推理示例：
 ```bash
-music_name="hanasaki - 快晴"
+music_name="Guiano,花譜 - 花 feat. 花譜"
 ```
 ```bash
 python main_reflow.py \
   -i "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/cleaned/step_3/noreverb/${music_name}_noreverb.flac" \
-  -m "exp/reflow-test/model_best_mel_val_mse_step19000.pt" \
-  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered/${music_name}_DryVocal_19000.flac" \
+  -m "exp/reflow-test/model_best_mel_val_mse_step28000.pt" \
+  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered/${music_name}_DryVocal_28000.flac" \
   -k 0 \
   -id 1 \
   -method "auto" \
@@ -249,8 +249,8 @@ python main_reflow.py \
 ```bash
 python main_reflow.py \
   -i "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/cleaned/step_2/Instrumental/${music_name}_Instrumental.flac" \
-  -m "exp/reflow-test/model_best_mel_val_mse_step19000.pt" \
-  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered/${music_name}_Harmonic_19000.flac" \
+  -m "exp/reflow-test/model_best_mel_val_mse_step28000.pt" \
+  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered/${music_name}_Harmonic_28000.flac" \
   -k 0 \
   -id 1 \
   -method "auto" \
@@ -305,27 +305,48 @@ python train_diff.py -c configs/diffusion.yaml
 
 ```bash
 cd /home/pangjichen/workspace/VocalTS/third_party/SO-VITS-SVC
-data_index=0016
-music_name="hanasaki - 快晴"
+data_index=0019
+music_name="蔡依林 - 日不落"
 ```
 
 ```bash
+# CuSummer
 python inference_main.py \
-  -m "logs/44k/G_90400.pth" \
+  -m "logs/44k/G_92000.pth" \
   -c "configs/config.json" \
   -n "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/cleaned/step_3/noreverb/${music_name}_noreverb.flac" \
   -t 0 \
   --enhance \
-  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered_SOVITS/${music_name}_DryVocal_90400.flac"
+  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered_SOVITS_CuSummer/${music_name}_DryVocal_92000.flac"
 ```
 ```bash
 python inference_main.py \
-  -m "logs/44k/G_90400.pth" \
+  -m "logs/44k/G_92000.pth" \
   -c "configs/config.json" \
   -n "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/cleaned/step_2/Instrumental/${music_name}_Instrumental.flac" \
   -t 0 \
   --enhance \
-  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered_SOVITS/${music_name}_Harmonic_90400.flac"
+  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered_SOVITS_CuSummer/${music_name}_Harmonic_92000.flac"
+```
+---
+```bash
+# ikura
+python inference_main.py \
+  -m "logs/44k/G_best_146400_34.197796.pth" \
+  -c "configs/config.json" \
+  -n "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/cleaned/step_3/noreverb/${music_name}_noreverb.flac" \
+  -t 0 \
+  --enhance \
+  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered_SOVITS_ikura/${music_name}_DryVocal_146400.flac"
+```
+```bash
+python inference_main.py \
+  -m "logs/44k/G_best_146400_34.197796.pth" \
+  -c "configs/config.json" \
+  -n "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/cleaned/step_2/Instrumental/${music_name}_Instrumental.flac" \
+  -t 0 \
+  --enhance \
+  -o "/home/pangjichen/workspace/VocalTS/linked_data/inference_data/${data_index}/transfered_SOVITS_ikura/${music_name}_Harmonic_146400.flac"
 ```
 
 ## 目录切换注意事项
